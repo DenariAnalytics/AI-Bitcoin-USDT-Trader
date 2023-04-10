@@ -4,8 +4,6 @@ import tensorflow as tf
 from sklearn.preprocessing import MinMaxScaler
 
 import load_data
-import preprocess_data
-
 
 def split_data(data, train_fraction=0.8):
     data_array = np.array(data)
@@ -24,7 +22,7 @@ def create_sequences(data, window_size=60):
     return X, y
 
 
-def calculate_trading_signals(y_pred, y_true, buy_threshold=0.01, sell_threshold=-0.01):
+def calculate_trading_signals(y_pred, y_true, buy_threshold=0.03, sell_threshold=-0.03):
     # Ensure y_pred and y_true are numpy arrays
     y_pred = np.array(y_pred)
     y_true = np.array(y_true)
@@ -39,14 +37,20 @@ def calculate_trading_signals(y_pred, y_true, buy_threshold=0.01, sell_threshold
 
     return signals
 
-def backtest_strategy(signals, prices):
+def backtest_strategy(signals, prices, initial_capital=1000, return_dataframe=False):
     # Calculate returns
     returns = np.zeros_like(prices)
     position = 0
+    capital = initial_capital
+    invested_amounts = []
+
     for i in range(1, len(signals)):
         if signals[i - 1] != 0:
             position = signals[i - 1]
+            invested_amount = capital * position
+            invested_amounts.append(invested_amount)
         returns[i] = (prices[i] - prices[i - 1]) * position
+        capital += returns[i]
 
     # Calculate cumulative returns
     cumulative_returns = np.cumsum(returns)
@@ -60,7 +64,7 @@ def backtest_strategy(signals, prices):
     drawdowns = np.maximum.accumulate(cumulative_returns) - cumulative_returns
     max_drawdown = np.max(drawdowns)
 
-    return {
+    results = {
         'returns': returns,
         'cumulative_returns': cumulative_returns,
         'win_rate': win_rate,
@@ -68,16 +72,26 @@ def backtest_strategy(signals, prices):
         'max_drawdown': max_drawdown
     }
 
+    if return_dataframe:
+        results_df = pd.DataFrame(results)
+        return results_df
+
+    return results
+
+
 # Load and preprocess data
-data = load_data.local_data('C:/Users/tempf/Desktop/algo_trader/data/BTC-USDT_binance.csv')
+data = load_data.local_data('C:\\Users\\tempf\\Desktop\\AI-Trader\\data\\BTC-USDT_binance.csv')
+
 
 # Create train/test split
 train_data, test_data = split_data(data)
 
 # Scale data
 scaler = MinMaxScaler()
-train_data_scaled = scaler.fit_transform(train_data)
-test_data_scaled = scaler.transform(test_data)
+train_data_scaled = train_data.copy()
+test_data_scaled = test_data.copy()
+train_data_scaled[:, 0] = scaler.fit_transform(train_data[:, 0].reshape(-1, 1)).flatten()
+test_data_scaled[:, 0] = scaler.transform(test_data[:, 0].reshape(-1, 1)).flatten()
 
 # Create sequences for training and testing
 X_train, y_train = create_sequences(train_data_scaled)
@@ -94,14 +108,15 @@ model = tf.keras.Sequential([
 
 # Compile and train the model
 model.compile(optimizer='adam', loss='mse')
-model.fit(X_train, y_train, epochs=100, batch_size=32, shuffle=False)
+model.fit(X_train, y_train, epochs=750, batch_size=32, shuffle=False)
+model.save('btc/usdt_tading_model.h5')
 
 # Evaluate the model
 y_pred = model.predict(X_test)
-y_pred_inverse = scaler.inverse_transform(y_pred)
-y_test_inverse = scaler.inverse_transform(y_test)
+y_pred_inverse = scaler.inverse_transform(np.hstack([y_pred, np.zeros((y_pred.shape[0], train_data.shape[1]-1))]))[:, 0]
+y_test_inverse = scaler.inverse_transform(np.hstack([y_test.reshape(-1, 1), np.zeros((y_test.shape[0], train_data.shape[1]-1))]))[:, 0]
 
 # Calculate trading signals and backtest
 trading_signals = calculate_trading_signals(y_pred_inverse, y_test_inverse)
-backtest_results = backtest_strategy(trading_signals, y_test_inverse[:, 0])
-
+backtest_results = backtest_strategy(trading_signals, y_test_inverse, initial_capital=1000, return_dataframe=True)
+print(backtest_results)
