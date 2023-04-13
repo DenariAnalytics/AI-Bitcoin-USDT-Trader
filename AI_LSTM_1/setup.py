@@ -1,10 +1,14 @@
+import sys
+import os
+sys.path.append(os.path.abspath('..'))
+
 import numpy as np
 import pandas as pd
 import tensorflow as tf
 from sklearn.preprocessing import MinMaxScaler
 import joblib
 
-import load_data
+from indicators import calculate as calc, load_data as load
 
 def split_data(data, train_fraction=0.8):
     data_array = np.array(data)

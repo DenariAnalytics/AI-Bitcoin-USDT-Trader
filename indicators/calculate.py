@@ -1,11 +1,11 @@
 def ema(input_data, points=5):
     data = input_data.copy()
-    data[f'{points}_min_EMA'] = data['close'].ewm(span=points).mean()
+    data[f'{points}_ema'] = data['close'].ewm(span=points).mean()
     return data
 
 def ema_ribbon(input_data, points=[5, 15, 25, 35, 45, 55, 200], column_names=False):
     data = input_data.copy()
-    columns = [f'{point}_min_EMA' for point in points]
+    columns = [f'{point}_ema' for point in points]
     for point, column_name in zip(points, columns):
         data[column_name] = data['close'].ewm(span=point).mean()
     if column_names:
@@ -14,7 +14,7 @@ def ema_ribbon(input_data, points=[5, 15, 25, 35, 45, 55, 200], column_names=Fal
 
 def ma(input_data, points=5):
     data = input_data.copy()
-    data[f'{points}_min_MA'] = data['close'].rolling(window=points).mean()
+    data[f'{points}_ma'] = data['close'].rolling(window=points).mean()
     return data
 
 def rsi(input_data, period=14, column='close'):

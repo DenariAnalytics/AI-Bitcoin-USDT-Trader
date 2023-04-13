@@ -2,11 +2,29 @@ import ccxt
 import pandas as pd
 import numpy as np
 from datetime import datetime
+import os
 
-def np_to_df(input_array,columns = ['timestamp', 'open', 'high', 'low', 'close', 'volume']):
+def np_to_df(input_array, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume']):
     data = pd.DataFrame(input_array, columns=columns)
-    data['timestamp'] = pd.to_datetime(data['timestamp'], unit='ms')
+    data['timestamp'] = pd.to_datetime(data['timestamp'])
     return data
+
+def binance_data_trade(symbol, timeframe='1m', limit=None, output_dataframe=False):
+    binance = ccxt.binance()
+    # Fetch OHLCV data from Binance with the specified limit
+    ohlcv_data = binance.fetch_ohlcv(symbol, timeframe, limit=limit)
+    # Convert the timestamp to a readable format
+    timestamps = [binance.iso8601(data[0]) for data in ohlcv_data]
+    # Create a NumPy array with the latest data
+    data_array = np.column_stack((timestamps, ohlcv_data))[:, :-1]
+    
+    if output_dataframe:
+        # Convert the NumPy array to a pandas DataFrame
+        df = np_to_df(data_array)  # Reshape the data array
+        return df
+    
+    return data_array
+
 
 def binance_data(trading_pair, interval, start_date, end_date=None, output_dataframe=False, export_path=None):
     exchange = ccxt.binance({
@@ -15,14 +33,16 @@ def binance_data(trading_pair, interval, start_date, end_date=None, output_dataf
     })
 
     # Convert start date and end date to timestamps
-    start_timestamp = exchange.parse8601(start_date)
+    start_date_str = datetime.strptime(start_date, "%Y-%m-%d").strftime("%Y-%m-%dT%H:%M:%SZ")
+    start_timestamp = exchange.parse8601(start_date_str)
     if end_date:
-        end_timestamp = exchange.parse8601(end_date)
+        end_date_str = datetime.strptime(end_date, "%Y-%m-%d").strftime("%Y-%m-%dT%H:%M:%SZ")
+        end_timestamp = exchange.parse8601(end_date_str)
     else:
         end_timestamp = exchange.milliseconds()
 
-    # Define the timeframe
-    timeframe = f'{interval}m'
+    # Use the interval directly as the timeframe
+    timeframe = interval
 
     # Initialize an empty list to store data
     data = []
@@ -55,10 +75,12 @@ def binance_data(trading_pair, interval, start_date, end_date=None, output_dataf
     if output_dataframe:
         data = np_to_df(data)
         if export_path is not None:
-            data.to_csv('pd_' + export_path + trading_pair + '.csv', index=False)
-    if export_path is not None:
-        np.savetxt('np_', export_path + trading_pair + '.csv', data, delimiter=',')
-    return data
+            data.to_csv(os.path.join(export_path, 'pd_' + trading_pair + '.csv'), index=False)
+        return data
+    else:
+        if export_path is not None:
+            np.savetxt(os.path.join(export_path, 'np_' + trading_pair + '.csv'), data, delimiter=',')
+        return data
 
 def local_data(file_path, output_dataframe=False):
     # Load data from CSV file
